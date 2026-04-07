@@ -1,0 +1,61 @@
+# Career-Ops Profile Configuration
+# Synthetic sample profile for learning the system.
+
+candidate:
+  full_name: "Riley Mercer"
+  email: "riley@mercerlabs.dev"
+  phone: "+1-555-0147"
+  location: "Brooklyn, NY"
+  linkedin: "linkedin.com/in/riley-mercer"
+  portfolio_url: "https://rileymercer.dev"
+  github: "github.com/rileymercer"
+  twitter: "https://x.com/rileymercer"
+
+target_roles:
+  primary:
+    - "Staff Product Engineer"
+    - "Senior Applied AI Engineer"
+  archetypes:
+    - name: "Product Engineer, AI"
+      level: "Senior/Staff"
+      fit: "primary"
+    - name: "Full-Stack AI Engineer"
+      level: "Senior"
+      fit: "secondary"
+    - name: "AI Platform Engineer"
+      level: "Senior/Staff"
+      fit: "adjacent"
+
+narrative:
+  headline: "Product-minded engineer turning internal AI workflows into browser-native products"
+  exit_story: "Spent the last several years building internal automation and AI tooling. Now focused on packaging those capabilities into user-facing software that works for people who will never touch a terminal."
+  superpowers:
+    - "Turning messy operations workflows into clear browser UX"
+    - "Bridging product, design, and engineering around AI reliability"
+    - "Building evaluation and observability loops for fast iteration"
+  proof_points:
+    - name: "Orbit Console"
+      url: "https://rileymercer.dev/orbit-console"
+      hero_metric: "Grew internal weekly active usage from 40 to 320 users"
+    - name: "Policy Runner"
+      url: "https://github.com/rileymercer/policy-runner"
+      hero_metric: "Cut AI release validation time from 2 days to 45 minutes"
+    - name: "Canvas Flow"
+      url: "https://rileymercer.dev/canvas-flow"
+      hero_metric: "Reduced non-engineering workflow launch time by 55%"
+  dashboard:
+    url: "https://demo.rileymercer.dev/orbit"
+    password: "demo-2026"
+
+compensation:
+  target_range: "$190K-245K + equity"
+  currency: "USD"
+  minimum: "$175K"
+  location_flexibility: "Remote preferred, hybrid in NYC acceptable"
+
+location:
+  country: "United States"
+  city: "New York"
+  timezone: "ET"
+  visa_status: "No sponsorship needed"
+  onsite_availability: "1-2 days/week in NYC if role quality is high"
