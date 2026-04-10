@@ -2,6 +2,7 @@
 data/applications.md
 data/pipeline.md
 data/scan-history.tsv
+data/browser-harness.sqlite*
 reports/*.md
 !reports/.gitkeep
 output/*

@@ -90,6 +90,17 @@ templates/cv-template.html → PDF generation template
 - Both agents load the same `modes/*.md`, templates, scripts, and data files.
 - User-specific changes belong in the user layer from `DATA_CONTRACT.md`, not in system prompts.
 
+## Browser Harness Foundation
+
+The browser-first work now starts with the harness rather than the UI shell.
+
+- `harness/` holds the browser harness lifecycle, SQLite store, and orchestrator surface.
+- `data/browser-harness.sqlite` is the mutable runtime database for harness-owned state.
+- Mutable harness state is split into `job_state`, `tracker_state`, and `pdf_state`.
+- Current job snapshots and checkpoints live in SQLite tables; append-only event history is stored separately.
+- Route-sized actions are represented in code as `startEvaluationJob`, `retryJobFromCheckpoint`, and `requestCancellation` on the harness orchestrator.
+- Existing repo outputs remain canonical: reports still render to `reports/`, tracker updates still flow through TSV additions plus `merge-tracker.mjs`, and PDFs still reuse `generate-pdf.mjs`.
+
 ## File Naming Conventions
 
 - Reports: `{###}-{company-slug}-{YYYY-MM-DD}.md` (3-digit zero-padded)

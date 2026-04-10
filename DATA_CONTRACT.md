@@ -17,6 +17,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/applications.md` | Your application tracker |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history |
+| `data/browser-harness.sqlite*` | Browser harness runtime state and SQLite sidecars |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |
 | `jds/*` | Your saved job descriptions |
@@ -47,11 +48,13 @@ These files contain system logic, scripts, templates, and instructions that impr
 | `*.mjs` | Utility scripts |
 | `batch/batch-prompt.md` | Batch worker prompt |
 | `batch/batch-runner.sh` | Batch orchestrator |
+| `harness/*` | Browser harness orchestration, schema, and persistence modules |
 | `dashboard/*` | Go TUI dashboard |
 | `templates/*` | Base templates |
 | `fonts/*` | Self-hosted fonts |
 | `.claude/skills/*` | Skill definitions |
 | `plugins/career-ops/*` | Repo-local Codex plugin and skills |
+| `tests/harness/*` | Browser harness contract and orchestrator tests |
 | `.agents/plugins/marketplace.json` | Repo-local Codex marketplace entry |
 | `docs/*` | Documentation |
 | `VERSION` | Current version number |
