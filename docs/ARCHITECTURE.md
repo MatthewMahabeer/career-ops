@@ -95,6 +95,7 @@ templates/cv-template.html → PDF generation template
 The browser-first work now starts with the harness rather than the UI shell.
 
 - `harness/` holds the browser harness lifecycle, SQLite store, and orchestrator surface.
+- `harness/contracts.mjs` defines the v1 `ExtractedSnapshot` and `NormalizedJob` contracts, explicit unknown semantics, evidence bounds, and evaluation-readiness checks.
 - `data/browser-harness.sqlite` is the mutable runtime database for harness-owned state.
 - Mutable harness state is split into `job_state`, `tracker_state`, and `pdf_state`.
 - Current job snapshots and checkpoints live in SQLite tables; append-only event history is stored separately.

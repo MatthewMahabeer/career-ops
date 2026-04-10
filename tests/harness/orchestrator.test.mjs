@@ -4,8 +4,19 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
+import {
+  EXTRACTED_SNAPSHOT_CONTRACT_VERSION,
+  NORMALIZED_JOB_CONTRACT_VERSION,
+  makeUnknown,
+} from '../../harness/contracts.mjs';
 import { HarnessOrchestrator } from '../../harness/orchestrator.mjs';
 import { HarnessStore } from '../../harness/store.mjs';
+
+const DEFAULT_PASTED_SOURCE_TEXT = [
+  'ExampleCo is hiring a Senior AI Engineer.',
+  'Responsibilities include running browser-first job extraction and deterministic normalization.',
+  'Requirements include Node.js, Playwright, and workflow orchestration experience.',
+].join(' ');
 
 function createHarnessTestContext() {
   const dir = mkdtempSync(join(tmpdir(), 'career-ops-harness-'));
@@ -31,6 +42,161 @@ function accessFor(label) {
   };
 }
 
+function buildExtractedSnapshot({
+  sourceKind = 'pasted_text',
+  sourceValue = sourceKind === 'pasted_text' ? DEFAULT_PASTED_SOURCE_TEXT : 'https://example.com/jobs/123',
+  snapshotId = 'snapshot-example',
+  rawText = null,
+} = {}) {
+  return {
+    contractType: 'ExtractedSnapshot',
+    contractVersion: EXTRACTED_SNAPSHOT_CONTRACT_VERSION,
+    snapshotId,
+    source: {
+      kind: sourceKind,
+      url: sourceKind === 'url' ? sourceValue : null,
+    },
+    extraction: {
+      method: sourceKind === 'url' ? 'browser_dom' : 'pasted_text',
+      extractedAt: '2026-04-09T12:00:00.000Z',
+    },
+    content: {
+      rawText: rawText ?? (sourceKind === 'pasted_text' ? sourceValue : DEFAULT_PASTED_SOURCE_TEXT),
+      title: 'Senior AI Engineer',
+      language: 'en',
+    },
+  };
+}
+
+function buildNormalizedJob(extractedSnapshot, overrides = {}) {
+  const fallbackUsed = overrides.normalization?.strategy === 'fallback_model';
+  const base = {
+    contractType: 'NormalizedJob',
+    contractVersion: NORMALIZED_JOB_CONTRACT_VERSION,
+    extractedSnapshotId: extractedSnapshot.snapshotId,
+    source: {
+      kind: extractedSnapshot.source.kind,
+      url: extractedSnapshot.source.url,
+    },
+    normalization: {
+      strategy: fallbackUsed ? 'fallback_model' : 'deterministic',
+      normalizedAt: '2026-04-09T12:05:00.000Z',
+      confidence: {
+        overall: 0.88,
+        fields: {
+          'identity.companyName': 0.96,
+          'identity.roleTitle': 0.97,
+          'content.summary': 0.83,
+        },
+      },
+      fallback: {
+        eligible: fallbackUsed,
+        used: fallbackUsed,
+        reasons: fallbackUsed ? ['insufficient_confidence'] : [],
+      },
+    },
+    identity: {
+      companyName: 'ExampleCo',
+      roleTitle: 'Senior AI Engineer',
+    },
+    classification: {
+      archetype: 'AI Platform / LLMOps Engineer',
+      domain: 'Workflow software',
+      function: 'Build',
+      seniority: 'Senior',
+      remote: 'Remote-first',
+      location: makeUnknown('not_found'),
+      employmentType: 'Full-time',
+      teamSize: makeUnknown('not_found'),
+      compensation: makeUnknown('not_found'),
+    },
+    content: {
+      summary: 'Build and operate a browser-first evaluation harness for AI-assisted job search.',
+      responsibilities: [
+        'Own extraction, normalization, and evaluation workflow reliability.',
+      ],
+      requirementsMust: [
+        'Experience with Node.js and Playwright.',
+      ],
+      requirementsNice: makeUnknown('not_found'),
+      technologies: ['Node.js', 'Playwright', 'SQLite'],
+    },
+    evidence: [
+      {
+        evidenceId: 'ev-company',
+        fieldPath: 'identity.companyName',
+        quote: 'ExampleCo is hiring a Senior AI Engineer.',
+        sourceSnapshotId: extractedSnapshot.snapshotId,
+        sourceKind: extractedSnapshot.source.kind,
+        locator: {
+          strategy: 'section_hint',
+          section: 'Header',
+        },
+      },
+      {
+        evidenceId: 'ev-summary',
+        fieldPath: 'content.summary',
+        quote: 'Responsibilities include running browser-first job extraction and deterministic normalization.',
+        sourceSnapshotId: extractedSnapshot.snapshotId,
+        sourceKind: extractedSnapshot.source.kind,
+        locator: {
+          strategy: 'section_hint',
+          section: 'Responsibilities',
+        },
+      },
+      {
+        evidenceId: 'ev-requirement',
+        fieldPath: 'content.requirementsMust',
+        quote: 'Requirements include Node.js, Playwright, and workflow orchestration experience.',
+        sourceSnapshotId: extractedSnapshot.snapshotId,
+        sourceKind: extractedSnapshot.source.kind,
+        locator: {
+          strategy: 'section_hint',
+          section: 'Requirements',
+        },
+      },
+    ],
+  };
+
+  return {
+    ...base,
+    ...overrides,
+    source: {
+      ...base.source,
+      ...overrides.source,
+    },
+    normalization: {
+      ...base.normalization,
+      ...overrides.normalization,
+      confidence: {
+        ...base.normalization.confidence,
+        ...overrides.normalization?.confidence,
+        fields: {
+          ...base.normalization.confidence.fields,
+          ...overrides.normalization?.confidence?.fields,
+        },
+      },
+      fallback: {
+        ...base.normalization.fallback,
+        ...overrides.normalization?.fallback,
+      },
+    },
+    identity: {
+      ...base.identity,
+      ...overrides.identity,
+    },
+    classification: {
+      ...base.classification,
+      ...overrides.classification,
+    },
+    content: {
+      ...base.content,
+      ...overrides.content,
+    },
+    evidence: overrides.evidence ?? base.evidence,
+  };
+}
+
 function runCoreSteps(orchestrator, { jobId, access, through = 'render_report' }) {
   const steps = ['ingest_source', 'normalize_job', 'evaluate_job', 'render_report'];
   const targetIndex = steps.indexOf(through);
@@ -38,13 +204,26 @@ function runCoreSteps(orchestrator, { jobId, access, through = 'render_report' }
     throw new Error(`Unknown core step "${through}"`);
   }
 
+  const {
+    job,
+  } = orchestrator.getJobGraph({ jobId, access });
+  const extractedSnapshot = buildExtractedSnapshot({
+    sourceKind: job.sourceKind,
+    sourceValue: job.sourceValue,
+  });
+  const normalizedJob = buildNormalizedJob(extractedSnapshot);
+
   for (const stepId of steps.slice(0, targetIndex + 1)) {
     orchestrator.startStep({ jobId, access, stepId });
     orchestrator.completeStep({
       jobId,
       access,
       stepId,
-      output: { stepId },
+      output: stepId === 'ingest_source'
+        ? extractedSnapshot
+        : stepId === 'normalize_job'
+          ? normalizedJob
+          : { stepId },
       artifactRefs: stepId === 'render_report'
         ? { reportNumber: 42, reportPath: 'reports/042-example-2026-04-09.md' }
         : null,
@@ -56,7 +235,7 @@ function createReportReadyJob(orchestrator, access) {
   const created = orchestrator.startEvaluationJob({
     ...access,
     sourceKind: 'pasted_text',
-    source: 'Some JD text',
+    source: DEFAULT_PASTED_SOURCE_TEXT,
   });
   const { jobId } = created.job;
   runCoreSteps(orchestrator, { jobId, access });
@@ -120,7 +299,7 @@ test('owner/workspace scope prevents cross-job reads and mutations', () => {
     const created = context.orchestrator.startEvaluationJob({
       ...accessA,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -157,7 +336,7 @@ test('soft cancellation is explicit and only honored between steps', () => {
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -175,11 +354,12 @@ test('soft cancellation is explicit and only honored between steps', () => {
       /between steps/
     );
 
+    const extractedSnapshot = buildExtractedSnapshot();
     context.orchestrator.completeStep({
       jobId,
       access,
       stepId: 'ingest_source',
-      output: { extractedText: 'normalized later' },
+      output: extractedSnapshot,
     });
     const cancelled = context.orchestrator.honorSoftCancellation({ jobId, access });
 
@@ -201,16 +381,17 @@ test('retryJobFromCheckpoint resets downstream core checkpoints and persists ret
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
+    const extractedSnapshot = buildExtractedSnapshot();
     context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
     context.orchestrator.completeStep({
       jobId,
       access,
       stepId: 'ingest_source',
-      output: { extractedText: 'Role details' },
+      output: extractedSnapshot,
     });
     context.orchestrator.startStep({ jobId, access, stepId: 'normalize_job' });
     context.orchestrator.failStep({
@@ -250,7 +431,7 @@ test('startStep requires a matching live lease owner/token when a lease exists',
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -310,7 +491,7 @@ test('scoped readable job graphs and events redact live lease tokens', () => {
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -335,6 +516,192 @@ test('scoped readable job graphs and events redact live lease tokens', () => {
   }
 });
 
+test('ingest_source only accepts an ExtractedSnapshot that matches the job source', () => {
+  const context = createHarnessTestContext();
+  const access = accessFor('ingest-contract');
+
+  try {
+    const created = context.orchestrator.startEvaluationJob({
+      ...access,
+      sourceKind: 'url',
+      source: 'https://example.com/jobs/123',
+    });
+    const { jobId } = created.job;
+
+    context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
+
+    assert.throws(
+      () => context.orchestrator.completeStep({
+        jobId,
+        access,
+        stepId: 'ingest_source',
+        output: buildExtractedSnapshot({
+          sourceKind: 'url',
+          sourceValue: 'https://example.com/jobs/999',
+        }),
+      }),
+      /source\.url must match the job source value/
+    );
+
+    const stillRunning = context.orchestrator.getJobGraph({ jobId, access });
+    assert.equal(stillRunning.job.jobState, 'running');
+    assert.equal(
+      stillRunning.checkpoints.find((checkpoint) => checkpoint.stepId === 'ingest_source').status,
+      'running'
+    );
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('ingest_source rejects pasted_text snapshots that do not match the queued source body', () => {
+  const context = createHarnessTestContext();
+  const access = accessFor('ingest-pasted-contract');
+
+  try {
+    const created = context.orchestrator.startEvaluationJob({
+      ...access,
+      sourceKind: 'pasted_text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
+    });
+    const { jobId } = created.job;
+
+    context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
+
+    assert.throws(
+      () => context.orchestrator.completeStep({
+        jobId,
+        access,
+        stepId: 'ingest_source',
+        output: buildExtractedSnapshot({
+          sourceKind: 'pasted_text',
+          rawText: 'Different JD text that was never queued for this job.',
+        }),
+      }),
+      /must match the queued pasted_text source/
+    );
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('normalize_job only completes when the normalized contract is ready for evaluation', () => {
+  const context = createHarnessTestContext();
+  const access = accessFor('normalize-contract');
+
+  try {
+    const created = context.orchestrator.startEvaluationJob({
+      ...access,
+      sourceKind: 'pasted_text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
+    });
+    const { jobId } = created.job;
+    const extractedSnapshot = buildExtractedSnapshot();
+
+    context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
+    context.orchestrator.completeStep({
+      jobId,
+      access,
+      stepId: 'ingest_source',
+      output: extractedSnapshot,
+    });
+    context.orchestrator.startStep({ jobId, access, stepId: 'normalize_job' });
+
+    const unreadyNormalizedJob = buildNormalizedJob(extractedSnapshot, {
+      identity: {
+        companyName: makeUnknown('not_found'),
+      },
+      normalization: {
+        confidence: {
+          overall: 0.42,
+          fields: {
+            'identity.companyName': 0.1,
+            'identity.roleTitle': 0.95,
+          },
+        },
+        fallback: {
+          eligible: true,
+          used: false,
+          reasons: ['missing_core_identity', 'insufficient_confidence'],
+        },
+      },
+      content: {
+        summary: makeUnknown('not_found'),
+        responsibilities: makeUnknown('not_found'),
+        requirementsMust: makeUnknown('not_found'),
+      },
+    });
+
+    assert.throws(
+      () => context.orchestrator.completeStep({
+        jobId,
+        access,
+        stepId: 'normalize_job',
+        output: unreadyNormalizedJob,
+      }),
+      /not ready for evaluation/
+    );
+
+    const stillRunning = context.orchestrator.getJobGraph({ jobId, access });
+    assert.equal(stillRunning.job.jobState, 'running');
+    assert.equal(
+      stillRunning.checkpoints.find((checkpoint) => checkpoint.stepId === 'normalize_job').status,
+      'running'
+    );
+  } finally {
+    context.cleanup();
+  }
+});
+
+test('normalize_job rejects evidence that does not resolve back to the extracted snapshot text', () => {
+  const context = createHarnessTestContext();
+  const access = accessFor('normalize-evidence');
+
+  try {
+    const created = context.orchestrator.startEvaluationJob({
+      ...access,
+      sourceKind: 'pasted_text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
+    });
+    const { jobId } = created.job;
+    const extractedSnapshot = buildExtractedSnapshot();
+
+    context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
+    context.orchestrator.completeStep({
+      jobId,
+      access,
+      stepId: 'ingest_source',
+      output: extractedSnapshot,
+    });
+    context.orchestrator.startStep({ jobId, access, stepId: 'normalize_job' });
+
+    assert.throws(
+      () => context.orchestrator.completeStep({
+        jobId,
+        access,
+        stepId: 'normalize_job',
+        output: buildNormalizedJob(extractedSnapshot, {
+          evidence: [
+            {
+              evidenceId: 'ev-fabricated',
+              fieldPath: 'content.summary',
+              quote: 'Completely fabricated evidence.',
+              sourceSnapshotId: extractedSnapshot.snapshotId,
+              sourceKind: extractedSnapshot.source.kind,
+              locator: {
+                strategy: 'excerpt',
+              },
+            },
+          ],
+        }),
+      }),
+      /must be present in ExtractedSnapshot\.content\.rawText/
+    );
+  } finally {
+    context.cleanup();
+  }
+});
+
 test('render_report cannot cross into report_ready without committed report artifacts', () => {
   const context = createHarnessTestContext();
   const access = accessFor('report');
@@ -343,7 +710,7 @@ test('render_report cannot cross into report_ready without committed report arti
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -381,7 +748,7 @@ test('retry clears stale cancellation flags after cancel-requested step failure'
     const created = context.orchestrator.startEvaluationJob({
       ...access,
       sourceKind: 'pasted_text',
-      source: 'Some JD text',
+      source: DEFAULT_PASTED_SOURCE_TEXT,
     });
     const { jobId } = created.job;
 
@@ -412,11 +779,14 @@ test('retry clears stale cancellation flags after cancel-requested step failure'
     assert.equal(retried.job.currentStep, 'ingest_source');
 
     context.orchestrator.startStep({ jobId, access, stepId: 'ingest_source' });
+    const extractedSnapshot = buildExtractedSnapshot({
+      snapshotId: 'snapshot-retry',
+    });
     context.orchestrator.completeStep({
       jobId,
       access,
       stepId: 'ingest_source',
-      output: { extractedText: 'retry worked' },
+      output: extractedSnapshot,
     });
 
     const postRetry = context.orchestrator.honorSoftCancellation({ jobId, access });

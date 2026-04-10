@@ -122,6 +122,17 @@ SQLite should own mutable harness state and append-only event history. The files
 - Prior art should come from the existing Career-Ops emphasis on pipeline integrity, deterministic artifact generation, tracker merge discipline, and health-check style validation rather than implementation-detail-heavy unit tests.
 - The strongest early test targets should be the evaluation job orchestrator, extraction and normalization pipeline, report renderer and artifact writer, and tracker projection plus merge and index sync.
 
+## Issue #3 Contract Decisions
+
+The v1 extraction and normalization boundary is now concrete in `harness/contracts.mjs`.
+
+- `ExtractedSnapshot` v1 is the shared ingestion output for both URLs and pasted JD text. It carries source metadata, extraction metadata, and one canonical `content.rawText` payload for downstream normalization.
+- `NormalizedJob` v1 separates normalized structure from evidence. The structure is grouped into `identity`, `classification`, and `content`; supporting snippets live in a bounded `evidence` array with snapshot linkage and locator metadata.
+- Missing or ambiguous facts use an explicit `{ kind: "unknown", reason, note? }` object. `null` is reserved for structurally absent values such as `source.url` on pasted-text ingestion, not for "we did not find this fact."
+- Evaluation may proceed only when normalization has a known company name, a known role title, at least one substantive content signal (`summary`, `responsibilities`, or `requirementsMust`), and minimum confidence above the configured thresholds.
+- Evidence is intentionally bounded: limited item count, limited quote size, and required provenance back to the originating extracted snapshot. The normalized contract is not allowed to smuggle the full JD forward as "evidence."
+- Deterministic normalization stays the default path. A bounded fallback is eligible only when the extracted snapshot is structurally valid and substantive enough to justify a rescue pass, but deterministic normalization still misses core identity/content or lands below confidence thresholds.
+
 ## Out of Scope
 
 - Building a browser clone of Codex, Claude Code, or any general-purpose shell or browser agent

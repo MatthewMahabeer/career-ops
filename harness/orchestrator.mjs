@@ -20,6 +20,11 @@ import {
   normalizeSourceInput,
   nowIso,
 } from './schema.mjs';
+import {
+  assertExtractedSnapshotMatchesJobSource,
+  assertNormalizedJobMatchesExtractedSnapshot,
+  assessNormalizedJobForEvaluation,
+} from './contracts.mjs';
 import { HarnessStore } from './store.mjs';
 
 function checkpointMap(checkpoints) {
@@ -319,6 +324,12 @@ export class HarnessOrchestrator {
         owner: leaseOwner,
         token: leaseToken,
       }, 'complete a step');
+      const normalizedOutput = this.#normalizeStepOutput({
+        job,
+        jobId,
+        stepId,
+        output,
+      });
       const reportArtifactRefs = stepId === 'render_report'
         ? normalizeCommittedReportArtifactRefs(artifactRefs)
         : stepId === 'generate_pdf'
@@ -329,7 +340,7 @@ export class HarnessOrchestrator {
       this.store.updateCheckpoint(jobId, stepId, {
         status: 'succeeded',
         last_finished_at: updatedAt,
-        output_json: output === null ? null : JSON.stringify(output),
+        output_json: normalizedOutput === null ? null : JSON.stringify(normalizedOutput),
         error_json: null,
         updated_at: updatedAt,
       });
@@ -421,7 +432,7 @@ export class HarnessOrchestrator {
         stepId,
         payload: {
           owner: activeLease?.owner ?? leaseOwner,
-          output,
+          output: normalizedOutput,
           artifactRefs: reportArtifactRefs ?? artifactRefs,
         },
         createdAt: updatedAt,
@@ -641,5 +652,33 @@ export class HarnessOrchestrator {
     }
 
     return activeLease;
+  }
+
+  #normalizeStepOutput({ job, jobId, stepId, output }) {
+    if (stepId === 'ingest_source') {
+      return assertExtractedSnapshotMatchesJobSource(output, {
+        sourceKind: job.sourceKind,
+        sourceValue: job.sourceValue,
+      });
+    }
+
+    if (stepId === 'normalize_job') {
+      const extractedSnapshot = this.store.getCheckpoint(jobId, 'ingest_source').output;
+      if (!extractedSnapshot) {
+        throw new Error('normalize_job requires a committed ExtractedSnapshot from ingest_source');
+      }
+
+      const normalizedJob = assertNormalizedJobMatchesExtractedSnapshot(output, extractedSnapshot);
+      const readiness = assessNormalizedJobForEvaluation(normalizedJob);
+      if (!readiness.accepted) {
+        throw new Error(
+          `normalize_job output is not ready for evaluation: ${readiness.reasons.join(', ')}`
+        );
+      }
+
+      return normalizedJob;
+    }
+
+    return output;
   }
 }
